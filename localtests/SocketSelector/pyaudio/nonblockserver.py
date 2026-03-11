@@ -103,64 +103,76 @@ def verify_token(conn, mask):
 
 def cast(conn, mask):
     # CHANGED THIS TO HANDLE AUDIO DATA CASTING
-    data = conn.recv(4096)
+    # data = None
+    try:
+        data = conn.recv(4096)
+    except (ConnectionResetError, ConnectionAbortedError) as e:
+        # TODO: Close channel entirely if caster is gone, disconnect listeners from said channel too.
+        data = None
+
     # data = conn.recv(1000)  # Should be ready
 
     # Find which channel this current caster is casting to.
     # sel.get_key(conn)
 
-    channel_to_cast = cast_table.get(conn)
     if data:
+        channel_to_cast = cast_table.get(conn)
         # Here, we want to find an address to send to
-        print('echoing audio data to: ', conn)
+        # print('echoing audio data to: ', conn)
         # print('echoing', repr(data), 'to', conn)
         # conn.send(data)  # Hope it won't block
 
         if channel_to_cast:
             # Get listeners
             if receive_table.get(channel_to_cast):
-                print(receive_table.get(channel_to_cast))
+                # print(receive_table.get(channel_to_cast))
                 all_listeners = receive_table[channel_to_cast]
                 for listener in all_listeners:
-                    print('sending audio data to: ', listener)
-                    listener.send(data)  # Hope it won't block
-                    # time.sleep(0.1)
+                    try:
+                        print('sending audio data to: ', listener)
+                        listener.send(data)  # Hope it won't block
+                    except (TimeoutError, OSError) as e:
+                        # Timed out, either disconnected or something else failed.
+                        # Remove listener if this is the case.
+                        receive_table[channel_to_cast].remove(listener)
+                        print("Listener removed.")
 
-                # if isinstance(all_listeners, list):
-                #     for listener in all_listeners:
-                #         print('sending', repr(data), 'to', listener)
-                #         listener.send(data)  # Hope it won't block
-                # else:
-                #     print('sending', repr(data), 'to', all_listeners)
-                #     all_listeners.send(data)  # Hope it won't block
-                # pass
+                    # NOTE: are there other triggers for OSError that need specifics?
+                    # except OSError as e:
+                        # Listener is currently a closed socket, remove it.
+                        # receive_table[channel_to_cast].remove(listener)
+                        # print("Listener removed.")
+                        # print("Listener is currently: ", repr(listener))
     else:
         print('closing', conn)
-        # TODO: Remove this caster from the tables
+        # Remove this caster from the tables
+        cast_table.pop(conn)
         sel.unregister(conn)
         conn.close()
 
 def read(conn, mask):
-    # Note: does this function even do anything right now? Not really.
     try:
         # CHANGED THIS TO HANDLE AUDIO DATA CASTING
-        data = conn.recv(4096)
-        # data = conn.recv(1000)  # Should be ready
-    except ConnectionResetError as e:
+        # data = conn.recv(4096)
+        data = conn.recv(1000)  # Should be ready
+    except (ConnectionResetError, ConnectionAbortedError) as e:
         # Catch closing the instance here, unregister the socket
         data = None
         pass
     # Might be able to change registration in this func by doing unregister and reregister.
     # See https://docs.python.org/3.14/library/selectors.html#selectors.BaseSelector.modify
-    sel.get_key(conn)
+
+    # If there's any data sent from the client currently, decode the signals.
+    # This might turn into chatting later.
     if data:
-        # Here, we want to find an address to send to
-        # TODO: find a way to send this to another user instead of echoing back.
-        print('echoing', repr(data), 'to', conn)
-        conn.send(data)  # Hope it won't block
+        recv_signal = data.decode()
+        # if recv_signal == "EOF":
+        #     print('closing', conn)
+        #     sel.unregister(conn)
+        #     conn.close()
     else:
         print('closing', conn)
-        # TODO: Remove this listener from the tables
+        # Remove this listener as a connection, table removal is handled in cast if listener is disconnected at all.
         sel.unregister(conn)
         conn.close()
 

@@ -35,23 +35,33 @@ output_stream = p.open(format=FORMAT,
                 frames_per_buffer=CHUNK)
 
 if modifiedMessage.decode() == "Connection allowed as listener.":
-    while True:
-        data = clientSocket.recv(4096)
-        if data:
-            output_stream.write(data)
+    try:
+        while True:
+            data = clientSocket.recv(4096)
+            if data:
+                output_stream.write(data)
+    except KeyboardInterrupt as e:
+        # Close connection, send the kill packet to disconnect
+        # clientSocket.sendall("EOF".encode())
+        clientSocket.close()
+        pass
+else:
+    # Send audio here
+    try:
+        while True:
+            data = input_stream.read(CHUNK)
+            clientSocket.send(data)
+    except KeyboardInterrupt as e:
+        clientSocket.close()
+        pass
 
-# Send audio here
-while True:
-    data = input_stream.read(CHUNK)
-    clientSocket.send(data)
-
-for i in range (0, 3):
-    # if i == 0:
-    #
-    # else:
-        message = input('Type a sentence to send\n')
-        clientSocket.send(message.encode())
-        modifiedMessage = clientSocket.recv(1024)
-        print(modifiedMessage.decode())
+# for i in range (0, 3):
+#     # if i == 0:
+#     #
+#     # else:
+#         message = input('Type a sentence to send\n')
+#         clientSocket.send(message.encode())
+#         modifiedMessage = clientSocket.recv(1024)
+#         print(modifiedMessage.decode())
 
 clientSocket.close()
