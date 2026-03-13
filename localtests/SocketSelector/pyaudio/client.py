@@ -1,8 +1,8 @@
 # Client
-# CONVERT TO UDP
+import json
 import pyaudiowpatch as pyaudio
 from socket import *
-from constants import BUFFER_SIZE, ServerResp
+from constants import BUFFER_SIZE, ServerResp, ServerID
 
 serverName = "localhost"
 serverPort = 3601
@@ -32,10 +32,24 @@ def join_channel():
     # After sending a connect request, immediate run .send(token) to verify the token.
     # If that returns 200, then we can start sending data.
     print("Available channels:\n"
-          "10.24")
-    message = input("Request access to an available channel: ")
+          "10.24 <-> 655.35")
+
+    channel_id = input("Request access to an available channel: ")
     print("Requesting channel access to the server and waiting for approval...")
-    clientSocket.send(message.encode())
+
+    # TODO: Allow the user to choose a server first.
+    # Server set to Master System for now by default.
+    channel_request_pack = {
+        "server_id": ServerID.MS,
+        "channel_id": channel_id,
+        # "user_name": "" # Add this later for the server to visibly show who's casting.
+    }
+
+    json_req = json.dumps(channel_request_pack)
+
+    # TODO: replace .send() with .sendto(), so the user can send to a designated IP based on server_id.
+    # clientSocket.send(channel_id.encode())
+    clientSocket.send(json_req.encode())
     message_response = clientSocket.recv(1024)
     print(message_response.decode())
 
@@ -61,6 +75,22 @@ def listener_handler():
     clientSocket.close()
 
 # else:
+
+# TODO: implement threaded functions below:
+# def handle_cocast_requests():
+#     # Thread function.
+#     # If someone requests to cocast, receive the notif here and allow the host-caster to accept or deny.
+#     pass
+#
+# def receive_cocast_packets():
+#     # Thread function.
+#     # Co-cast packets will be received here
+#     pass
+#
+# def process_audio():
+#     # Thread function.
+#     # All packets from host-caster + co-casters are combined and processed before being sent to the server.
+#     pass
 
 def caster_handler():
     # Send audio here

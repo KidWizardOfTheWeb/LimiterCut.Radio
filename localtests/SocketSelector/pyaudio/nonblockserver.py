@@ -1,9 +1,10 @@
 import selectors
 import socket
+import json
 
 import pyaudiowpatch as pyaudio
 
-from constants import BUFFER_SIZE, ServerResp
+from constants import BUFFER_SIZE, ServerResp, ServerID
 
 # CONVERT TO UDP?
 
@@ -42,8 +43,10 @@ def verify_token(conn, mask):
     # JWT token should be verified before this, rename this function in the future.
     data = conn.recv(1000)
     if data:
-        # Here, we want to find an address to send to
-        channelID_requested = data.decode()
+        # Unpack our json request into it's main parts
+        channel_req = json.loads(data.decode())
+        serverID_requested = channel_req['server_id']
+        channelID_requested = channel_req['channel_id']
 
         print('User is requesting an action on channel: ', channelID_requested, '\nfrom: ', conn)
         # If currently casting, either set to a listener, or, if user asks to cast, send cast request to host-caster.
