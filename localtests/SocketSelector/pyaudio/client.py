@@ -2,22 +2,16 @@
 # CONVERT TO UDP
 import pyaudiowpatch as pyaudio
 from socket import *
+from constants import BUFFER_SIZE, ServerResp
+
 serverName = "localhost"
 serverPort = 3601
 clientSocket = socket(AF_INET, SOCK_STREAM)
 clientSocket.connect((serverName, serverPort))
-# After sending a connect request, immediate run .send(token) to verify the token.
-# If that returns 200, then we can start sending data.
-print("Available channels:\n"
-      "10.24")
-message = input("Request access to an available channel: ")
-print("Requesting channel access to the server and waiting for approval...")
-clientSocket.send(message.encode())
-modifiedMessage = clientSocket.recv(1024)
-print(modifiedMessage.decode())
+
 
 # Audio
-CHUNK = 1024 * 4
+CHUNK = BUFFER_SIZE
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 48000
@@ -34,9 +28,28 @@ output_stream = p.open(format=FORMAT,
                 output=True,
                 frames_per_buffer=CHUNK)
 
-if modifiedMessage.decode() == "Connection allowed as listener.":
+def join_channel():
+    # After sending a connect request, immediate run .send(token) to verify the token.
+    # If that returns 200, then we can start sending data.
+    print("Available channels:\n"
+          "10.24")
+    message = input("Request access to an available channel: ")
+    print("Requesting channel access to the server and waiting for approval...")
+    clientSocket.send(message.encode())
+    message_response = clientSocket.recv(1024)
+    print(message_response.decode())
+
+    return message_response
+
+
+# if message_response.decode() == ServerResp.LISTEN_OK:
+
+def listener_handler():
     try:
         while True:
+            # Note: consider .recv_into() for buffer storage instead.
+            # This means that the client could store a buffer and need to call receive less often.
+            # https://docs.python.org/3.14/library/socket.html#socket.socket.recv_into
             data = clientSocket.recv(4096)
             if data:
                 output_stream.write(data)
@@ -45,7 +58,11 @@ if modifiedMessage.decode() == "Connection allowed as listener.":
         # clientSocket.sendall("EOF".encode())
         clientSocket.close()
         pass
-else:
+    clientSocket.close()
+
+# else:
+
+def caster_handler():
     # Send audio here
     # TODO: Make sending data a thread.
     # TODO: make receiving data from the server a thread.
@@ -61,9 +78,33 @@ else:
             # Implement another thread that receives audio data from co-caster input streams from the server.
             # Server sends all co-caster data to the main caster on the channel, all audio is averaged and sent to server.
             data = input_stream.read(CHUNK)
-            clientSocket.send(data)
+            # Note: use .sendall() instead to ensure all voice packets make it? Or just do .send()
+            # Testing .sendall() for now.
+            clientSocket.sendall(data)
     except KeyboardInterrupt as e:
         clientSocket.close()
         pass
 
-clientSocket.close()
+    clientSocket.close()
+
+
+if __name__ == '__main__':
+    # Connect to server
+    response = join_channel()
+
+    # If a listener, enter this handler
+    # Listeners should be able to:
+    # 1. Check which channel they're listening to.
+    # 2. The caster/channel's name.
+    # Note: make this a separate process?
+    if response == ServerResp.LISTEN_OK:
+        listener_handler()
+
+    # If a caster, enter this handler
+    # Casters should be able to:
+    # 1. Send audio data to the server, which redirects to the listener.
+    # 2. Receive data from "co-hosts" in a separate thread,
+    # Note: make this a separate process?
+    if response == ServerResp.CAST_OK:
+        caster_handler()
+    pass

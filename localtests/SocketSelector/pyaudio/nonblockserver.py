@@ -1,8 +1,9 @@
 import selectors
 import socket
-import time
 
 import pyaudiowpatch as pyaudio
+
+from constants import BUFFER_SIZE, ServerResp
 
 # CONVERT TO UDP?
 
@@ -17,7 +18,7 @@ serverPort = 3601
 
 # Audio
 p = pyaudio.PyAudio()
-CHUNK = 1024 * 4
+CHUNK = BUFFER_SIZE
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 48000
@@ -47,6 +48,8 @@ def verify_token(conn, mask):
         print('User is requesting an action on channel: ', channelID_requested, '\nfrom: ', conn)
 
         # TODO: Add verify token here
+        # TODO: check for if someone is currently casting on this channel and automate this.
+        # If currently casting, either set to a listener, or, if user asks to cast, send cast request to host-caster.
         res = int(input("Accept connection? 1 for cast, 2 for receive: "))
         if res == 1:
             # Add Cast/Listen flag, Channel ID, verified connection maybe? Probably a class structure for everything later.
@@ -70,8 +73,7 @@ def verify_token(conn, mask):
                 pass
 
             # Send response
-            conn.send(b"Connection allowed as caster.")
-
+            conn.send(ServerResp.CAST_OK)
 
         if res == 2:
             # Move to listen function
@@ -94,7 +96,7 @@ def verify_token(conn, mask):
             # Instead, automate this and maybe multithread the acceptance criteria?
             conn.settimeout(1)
             # conn.setblocking(True)
-            conn.send(b"Connection allowed as listener.")
+            conn.send(ServerResp.LISTEN_OK)
         # conn.send(data)  # Hope it won't block
     else:
         print('closing', conn)
@@ -105,6 +107,7 @@ def cast(conn, mask):
     # CHANGED THIS TO HANDLE AUDIO DATA CASTING
     # data = None
     try:
+        # Note: consider .recv_into() for buffer storage instead.
         data = conn.recv(4096)
     except (ConnectionResetError, ConnectionAbortedError) as e:
         # TODO: Close channel entirely if caster is gone, disconnect listeners from said channel too.
