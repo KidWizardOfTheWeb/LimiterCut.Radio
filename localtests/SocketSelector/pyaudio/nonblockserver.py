@@ -39,48 +39,31 @@ def accept(sock, mask):
     # sel.register(conn, selectors.EVENT_READ, read)
 
 def verify_token(conn, mask):
-    # TODO: retrieve token from user here to verify
+    # JWT token should be verified before this, rename this function in the future.
     data = conn.recv(1000)
     if data:
         # Here, we want to find an address to send to
         channelID_requested = data.decode()
 
         print('User is requesting an action on channel: ', channelID_requested, '\nfrom: ', conn)
-
-        # TODO: Add verify token here
-        # TODO: check for if someone is currently casting on this channel and automate this.
         # If currently casting, either set to a listener, or, if user asks to cast, send cast request to host-caster.
-        res = int(input("Accept connection? 1 for cast, 2 for receive: "))
-        if res == 1:
-            # Add Cast/Listen flag, Channel ID, verified connection maybe? Probably a class structure for everything later.
-            # These flags will help choose what function these connections will use
-            # Casters will send their packets to the cast function
-            # Listeners will retrieve packets from the listen function
 
-            # Move to cast function, set data to channel casting to
+        # TODO: add support for multicast
+        # Currently there is only support for one caster right now with this setup:
+        # change loose dicts to singleton class and handle better!
+
+        # Check if this channel currently has a caster.
+        list_of_casters = cast_table.get(channelID_requested)
+        print(list_of_casters)
+
+        # If there is no caster AND there is no one casting to the current channel requested, set them as the caster.
+        if not list_of_casters and channelID_requested not in cast_table.values():
+            # If not in our table, add this connection
+            cast_table[conn] = channelID_requested
             sel.modify(conn, selectors.EVENT_READ, cast)
-
-            # Move to table
-            list_of_casters = cast_table.get(channelID_requested)
-            if not list_of_casters:
-                # If not in our table, add this connection
-                cast_table[conn] = channelID_requested
-            else:
-                # If it does exist, the value should be a list of connections. Append to the connection list, if allowed.
-                # Currently, there can ONLY be one caster.
-                # However, if we can ensure that sending multiple audio packets from different sources is safe, we will allow it.
-                print("DEBUG HERE.")
-                pass
-
-            # Send response
             conn.send(ServerResp.CAST_OK)
-
-        if res == 2:
-            # Move to listen function
-            sel.modify(conn, selectors.EVENT_READ, read)
-            print("Modified to read.")
-
-            # Move to table
+        else:
+        # If there is a caster designated, make the user a receiver instead
             list_of_receivers = receive_table.get(channelID_requested)
             if not list_of_receivers:
                 # If not in our table, add it
@@ -88,16 +71,10 @@ def verify_token(conn, mask):
             else:
                 # If it does exist, the value should be a list of connections. Append to the connection list
                 receive_table[channelID_requested].append(conn)
-                print("DEBUG HERE.")
-                pass
-
-            # This helps the issue of nonblocking packets, but when someone else connects things freeze until accepted
-            # By the above function
-            # Instead, automate this and maybe multithread the acceptance criteria?
             conn.settimeout(1)
             # conn.setblocking(True)
             conn.send(ServerResp.LISTEN_OK)
-        # conn.send(data)  # Hope it won't block
+            sel.modify(conn, selectors.EVENT_READ, read)
     else:
         print('closing', conn)
         sel.unregister(conn)
@@ -154,8 +131,9 @@ def cast(conn, mask):
         conn.close()
 
 def read(conn, mask):
+    # If the listener writes to server at all, this is called.
+    # No idea what this could be used for yet, since the cast function redirects all inputs to users.
     try:
-        # CHANGED THIS TO HANDLE AUDIO DATA CASTING
         # data = conn.recv(4096)
         data = conn.recv(1000)  # Should be ready
     except (ConnectionResetError, ConnectionAbortedError) as e:
