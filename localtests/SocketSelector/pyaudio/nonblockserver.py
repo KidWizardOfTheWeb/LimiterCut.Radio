@@ -1,8 +1,14 @@
 import selectors
 import socket
 import json
+import sys
 
-import pyaudiowpatch as pyaudio
+if sys.platform == "win32":
+    # Windows uses wpatch for WASAPI audio bits, so this is required.
+    import pyaudiowpatch as pyaudio
+else:
+    # Note: check if other OSes do this, linux uses the base pyaudio package at the very list.
+    import pyaudio
 
 from constants import BUFFER_SIZE, ServerResp, ServerID
 
@@ -14,21 +20,15 @@ channel_table = {}
 cast_table = {}
 receive_table = {}
 
-serverName = "localhost"
+if sys.platform == "win32":
+    serverName = "localhost"
+elif sys.platform == "linux":
+    # Keeps all ports open for this to work. Go back and adjust this later.
+  serverName = "0.0.0.0"
+else:
+    # fallback option
+    serverName = socket.gethostname()
 serverPort = 3601
-
-# Audio
-p = pyaudio.PyAudio()
-CHUNK = BUFFER_SIZE
-FORMAT = pyaudio.paInt16
-CHANNELS = 2
-RATE = 48000
-# RECORD_SECONDS = 3
-stream = p.open(format=FORMAT,
-                channels=CHANNELS,
-                rate=RATE,
-                output=True,
-                frames_per_buffer=CHUNK)
 
 def accept(sock, mask):
     conn, addr = sock.accept()  # Should be ready

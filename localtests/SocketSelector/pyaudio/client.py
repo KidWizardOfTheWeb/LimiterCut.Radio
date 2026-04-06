@@ -1,16 +1,34 @@
 # Client
+import os
 import json
-import pyaudiowpatch as pyaudio
+from pathlib import Path
 from socket import *
+import pyaudiowpatch as pyaudio
+from environ import ImproperlyConfigured
+import environ # For reading environment variables
 from constants import BUFFER_SIZE, ServerResp, ServerID
 
-serverName = "localhost"
+# Set up .env
+BASE_DIR = Path(__file__).resolve().parent
+env = environ.Env(
+    DEBUG=(bool, False)
+)
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+# Try to put in an ip for the server to connect to. If none, do localhost instead for local testing.
+try:
+    serverName = env("CLIENT_SERVER")
+except ImproperlyConfigured as e:
+    print(e)
+    serverName = "localhost"
 serverPort = 3601
+
+# Connect sockets here
 clientSocket = socket(AF_INET, SOCK_STREAM)
 clientSocket.connect((serverName, serverPort))
 
-
-# Audio
+# Audio I/O streams
+# TODO: add stream for desktop audio with wpatch.
 CHUNK = BUFFER_SIZE
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
