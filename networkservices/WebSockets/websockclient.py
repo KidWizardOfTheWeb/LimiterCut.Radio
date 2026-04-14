@@ -168,8 +168,8 @@ async def handler(request_packet):
                 while True:
                 # await caster_handler(websocket)
                 # await websocket.send("Hello world!")
-                    data = input_stream.read(CHUNK)
-                    await websocket.send(data)
+                    await caster_handler(websocket)
+                    # await websocket.send(data)
                 # message = await websocket.recv()
                 # print(message)
             except ConnectionClosed:
