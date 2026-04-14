@@ -4,6 +4,7 @@ BUFFER_SIZE = 1024 * 4
 class ServerResp(bytes, Enum):
     LISTEN_OK = b"Connection allowed as listener."
     CAST_OK = b"Connection allowed as caster."
+    CHAT_OK = b"Connection allowed as chatter."
 
 # TODO: This should be placeholder for all-access servers, let users have a file of their own that they can use later.
 class ServerID(str, Enum):

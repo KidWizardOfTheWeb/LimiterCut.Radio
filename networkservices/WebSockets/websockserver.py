@@ -19,6 +19,7 @@ import secrets
 channel_table = {}
 cast_table = {}
 receive_table = {}
+room_table = {}
 
 # Join keys, from the example
 JOIN = {}
@@ -69,8 +70,51 @@ async def cast_to_client(websocket, channel_id):
         channel_to_cast = cast_table.get(websocket.id, None)
         if receive_table.get(channel_to_cast, None) is not None:
             broadcast(set(receive_table[channel_to_cast]), data)
-            # await asyncio.sleep(1)
     pass
+
+
+async def broadcast_to_clients(websocket, channel_id):
+    # When packets are received from the caster, broadcast them to the clients connected.
+    async for data in websocket:
+        # Get all users that are not this specific websocket and broadcast
+        # This will broadcast to everyone in the room as usual, including the main user.
+        # NOTE: to test on the same local device, uncomment this line and comment the other version out.
+        # users_to_receive = room_table[channel_id]
+        users_to_receive = room_table[channel_id].difference({websocket})
+        broadcast(users_to_receive, data)
+    pass
+
+
+async def join_room(websocket, channel_id):
+    # If room exists, user joins the set instead.
+    room_table[channel_id].add(websocket)
+    '''
+    room_table[channel_X] = {websock1, websock2, ...}
+    '''
+    try:
+        await websocket.send(ServerResp.CHAT_OK)
+        await broadcast_to_clients(websocket, channel_id)
+        await websocket.wait_closed()
+    finally:
+        room_table[channel_id].remove(websocket)
+    pass
+
+
+async def start_room(websocket, channel_id):
+    # Init a duplex room here.
+    # One user starts a room, so add them as the first in the set
+    room_table[channel_id] = {websocket}
+    '''
+    room_table[channel_X] = {websock1}
+    '''
+    try:
+        await websocket.send(ServerResp.CHAT_OK)
+        await broadcast_to_clients(websocket, channel_id)
+        await websocket.wait_closed()
+    finally:
+        room_table[channel_id].remove(websocket)
+    pass
+
 
 async def handler(websocket):
     message = await websocket.recv()
@@ -88,52 +132,59 @@ async def handler(websocket):
     print(event)
     print('User is requesting an action on channel: ', event["channel_id"], '\nfrom: ', websocket)
 
-    # If the channel is not being hosted currently, open new channel
-    list_of_casters = cast_table.get(event["channel_id"])
-    # print(list_of_casters)
-
-    # TODO: add "start channel func" instead of instantly casting to client.
-    # Also, refactor the below logic into their own functions for easier readability.
-
-    # If there is no caster AND there is no one casting to the current channel requested, set them as the caster.
-    if not list_of_casters and event["channel_id"] not in cast_table.values():
-        # Assign caster to table, value is channel_id
-        cast_table[websocket.id] = event["channel_id"]
-        try:
-            # Send success response for casting.
-            await websocket.send(ServerResp.CAST_OK)
-            # Send them to cast func, where messages received will be broadcast properly in an async loop.
-            await cast_to_client(websocket, event["channel_id"])
-        finally:
-            # Remove the caster from cast_table on disconnect
-            cast_table.pop(websocket.id)
-            pass
+    if "chat" in event["channel_type"]:
+        # Start room proc here if room isn't open, otherwise search for room and join
+        if event["channel_id"] not in room_table.keys():
+            await start_room(websocket, event["channel_id"])
+        else:
+            await join_room(websocket, event["channel_id"])
         pass
     else:
-        # Check if the user is already casting. If they are, do NOT let them in here.
-        # TODO: determine if we should use sets or lists here.
-        # Sets disallow the same websocket from connecting, lists allow dupes.
-        if cast_table.get(websocket.id, None) is None:
-            list_of_receivers = receive_table.get(event["channel_id"])
-            if not list_of_receivers:
-                # If not in our table, add it.
-                # Note: currently a set. Can change back to list later to allow dupes.
-                receive_table[event["channel_id"]] = {websocket}
-            else:
-                # If it does exist, the value should be a list of connections. Append to the connection list
-                receive_table[event["channel_id"]].add(websocket)
+        # If the channel is not being hosted currently, open new channel
+        list_of_casters = cast_table.get(event["channel_id"])
+        # print(list_of_casters)
+
+        # TODO: add "start channel func" instead of instantly casting to client.
+        # Also, refactor the below logic into their own functions for easier readability.
+
+        # If there is no caster AND there is no one casting to the current channel requested, set them as the caster.
+        if not list_of_casters and event["channel_id"] not in cast_table.values():
+            # Assign caster to table, value is channel_id
+            cast_table[websocket.id] = event["channel_id"]
             try:
-                # Send success response for listening.
-                await websocket.send(ServerResp.LISTEN_OK)
-                # Keep socket open, but don't perform any operations here.
-                # The listener will instead just receive packets from the caster broadcast.
-                # Later, we might add a chat function here or some way for listeners to interact with the server. Who knows.
-                await websocket.wait_closed()
+                # Send success response for casting.
+                await websocket.send(ServerResp.CAST_OK)
+                # Send them to cast func, where messages received will be broadcast properly in an async loop.
+                await cast_to_client(websocket, event["channel_id"])
             finally:
-                # Remove this listener from the receive_table's set/list on disconnect.
-                receive_table[event["channel_id"]].remove(websocket)
+                # Remove the caster from cast_table on disconnect
+                cast_table.pop(websocket.id)
                 pass
             pass
+        else:
+            # Check if the user is already casting. If they are, do NOT let them in here.
+            # Sets disallow the same websocket from connecting, lists allow dupes.
+            if cast_table.get(websocket.id, None) is None:
+                list_of_receivers = receive_table.get(event["channel_id"])
+                if not list_of_receivers:
+                    # If not in our table, add it.
+                    # Note: currently a set. Can change back to list later to allow dupes.
+                    receive_table[event["channel_id"]] = {websocket}
+                else:
+                    # If it does exist, the value should be a list of connections. Append to the connection list
+                    receive_table[event["channel_id"]].add(websocket)
+                try:
+                    # Send success response for listening.
+                    await websocket.send(ServerResp.LISTEN_OK)
+                    # Keep socket open, but don't perform any operations here.
+                    # The listener will instead just receive packets from the caster broadcast.
+                    # Later, we might add a chat function here or some way for listeners to interact with the server. Who knows.
+                    await websocket.wait_closed()
+                finally:
+                    # Remove this listener from the receive_table's set/list on disconnect.
+                    receive_table[event["channel_id"]].remove(websocket)
+                    pass
+                pass
 
     # async for message in websocket:
         # if data:
