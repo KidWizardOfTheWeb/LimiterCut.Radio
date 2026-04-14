@@ -212,7 +212,7 @@ if __name__ == "__main__":
     # Server set to Master System for now by default.
 
     # Uncomment this for local testing. Should make this a script arg in the future, honestly.
-    serverName = "localhost"
+    # serverName = "localhost"
 
     server_endpoint = "ws://" + serverName + ":" + str(serverPort)
     channel_request_pack = {
