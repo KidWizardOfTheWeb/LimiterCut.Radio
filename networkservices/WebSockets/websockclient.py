@@ -2,7 +2,12 @@
 import os
 import sys
 import json
+import threading
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from threading import Thread
+from queue import Queue
+
 from environ import ImproperlyConfigured
 import environ # For reading environment variables
 from constants import BUFFER_SIZE, ServerResp, ServerID
@@ -37,6 +42,11 @@ except ImproperlyConfigured as e:
     serverName = "localhost"
 serverPort = 3601
 
+def input_callback(in_data, frame_count, time_info, status):
+    # places frames into queue
+    frames_sent.put(in_data)
+    return (in_data, pyaudio.paContinue)
+
 # Audio I/O streams
 # TODO: add stream for desktop audio with wpatch.
 CHUNK = BUFFER_SIZE
@@ -48,7 +58,8 @@ input_stream = p.open(format=FORMAT,
                       channels=CHANNELS,
                       rate=RATE,
                       input=True,
-                      frames_per_buffer=CHUNK)
+                      frames_per_buffer=CHUNK,
+                      stream_callback=input_callback)
 
 USER_STATE = None
 
@@ -58,26 +69,50 @@ output_stream = p.open(format=FORMAT,
                        output=True,
                        frames_per_buffer=CHUNK)
 
+# We append our sent/received frames here as a way to create buffer and prevent choppy audio for chat rooms.
+frames_sent = Queue()
+frames_recv = Queue()
+
+async def pop_frames():
+    global output_stream
+    while not frames_recv.empty():
+        output_stream.write(frames_recv.get())
+        pass
+    pass
 
 async def caster_handler(websocket):
-    while True:
-        try:
-            # await websocket.send("Hello world!")
-            data = input_stream.read(CHUNK)
-            # data_pack = {
-            #     "raw_data": data
-            # }
-            # json_req = json.dumps(data_pack)
-            await websocket.send(data)
-            # await websocket.wait_closed()
-            # message = await websocket.recv()
-            # print(message)
-        except ConnectionClosed:
-            raise ConnectionClosed
+    global input_stream
+    # while True:
+    try:
+        # await websocket.send("Hello world!")
+        # data = input_stream.read(CHUNK)
+        # data_pack = {
+        #     "raw_data": data
+        # }
+        # json_req = json.dumps(data_pack)
+        await websocket.send(frames_sent.get())
+    except ConnectionClosed:
+        raise ConnectionClosed
     pass
 
 async def listener_handler(websocket):
     # while True:
+    # global output_stream
+    while True:
+        async for data in websocket:
+            try:
+                # await websocket.send("Hello world!")
+                # data = await websocket.recv()
+                frames_recv.put(data)
+                # output_stream.write(data)
+                # This break statement makes the chat functionality work for local.
+                # Unless you move things to new threads or make buffers, KEEP THIS FOR LOCAL TESTING.
+                # break
+            except ConnectionClosed:
+                raise ConnectionClosed
+    pass
+
+async def radio_listener_handler(websocket):
     global output_stream
     async for data in websocket:
         try:
@@ -89,7 +124,7 @@ async def listener_handler(websocket):
             # await asyncio.sleep(1)
         except ConnectionClosed:
             raise ConnectionClosed
-    pass
+
 
 async def handler(request_packet):
     global USER_STATE
@@ -117,6 +152,17 @@ async def handler(request_packet):
             await websocket.send(request_packet)
             USER_STATE = await websocket.recv()
             print(USER_STATE)
+        if USER_STATE == ServerResp.CHAT_OK:
+            # Cast and Listen permissions both active.
+            try:
+                # cast_task = asyncio.create_task(caster_handler(websocket))
+                listen_task = asyncio.create_task(listener_handler(websocket))
+                while True:
+                    await caster_handler(websocket)
+                    await pop_frames()
+            except ConnectionClosed:
+                print("Closed from chatting.")
+                continue
         if USER_STATE == ServerResp.CAST_OK:
             try:
                 while True:
@@ -135,7 +181,7 @@ async def handler(request_packet):
                     # data = await websocket.recv()
                     # print(data)
                     # output_stream.write(data)
-                    await listener_handler(websocket)
+                    await radio_listener_handler(websocket)
                 # await websocket.send("Hello world!")
                 # data = input_stream.read(CHUNK)
                 # await websocket.send(data)
@@ -159,23 +205,29 @@ if __name__ == "__main__":
           "10.24 <-> 655.35")
 
     channel_id = input("Request access to an available channel: ")
+    channel_type = input("Request channel type (Radio, chat): ")
     print("Requesting channel access to the server and waiting for approval...")
 
     # TODO: Allow the user to choose a server first.
     # Server set to Master System for now by default.
 
     # Uncomment this for local testing. Should make this a script arg in the future, honestly.
-    # serverName = "localhost"
+    serverName = "localhost"
 
     server_endpoint = "ws://" + serverName + ":" + str(serverPort)
     channel_request_pack = {
         "server_endpoint": str(server_endpoint),
         "server_id": ServerID.MS,
         "channel_id": channel_id,
+        "channel_type": channel_type
         # "user_name": "" # Add this later for the server to visibly show who's casting.
     }
 
     json_req = json.dumps(channel_request_pack)
+
+
+    # Implement pyaudio threads here instead of in our async tasks
+    # ...
 
     # Call channel connection and run async tasks
     asyncio.run(handler(json_req))
