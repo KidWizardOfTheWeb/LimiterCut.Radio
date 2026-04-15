@@ -1,4 +1,5 @@
 from enum import Enum, EnumDict
+# Note: this should be modifiable before a channel is started, per channel.
 BUFFER_SIZE = 1024 * 4
 
 class ServerResp(bytes, Enum):

@@ -25,7 +25,7 @@ else:
 
 import asyncio
 from websockets.asyncio.client import connect
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 
 # Set up .env
 BASE_DIR = Path(__file__).resolve().parent
@@ -42,10 +42,10 @@ except ImproperlyConfigured as e:
     serverName = "localhost"
 serverPort = 3601
 
-def input_callback(in_data, frame_count, time_info, status):
-    # places frames into queue
-    frames_sent.put(in_data)
-    return (in_data, pyaudio.paContinue)
+# def input_callback(in_data, frame_count, time_info, status):
+#     # places frames into queue
+#     frames_sent.put(in_data)
+#     return (in_data, pyaudio.paContinue)
 
 # Audio I/O streams
 # TODO: add stream for desktop audio with wpatch.
@@ -59,7 +59,8 @@ input_stream = p.open(format=FORMAT,
                       rate=RATE,
                       input=True,
                       frames_per_buffer=CHUNK,
-                      stream_callback=input_callback)
+                      # stream_callback=input_callback
+                      )
 
 USER_STATE = None
 
@@ -83,33 +84,44 @@ async def pop_frames():
 async def caster_handler(websocket):
     global input_stream
     # while True:
+    await asyncio.sleep(0)
     try:
-        # await websocket.send("Hello world!")
-        # data = input_stream.read(CHUNK)
-        # data_pack = {
-        #     "raw_data": data
-        # }
-        # json_req = json.dumps(data_pack)
-        await websocket.send(frames_sent.get())
+        await websocket.send(input_stream.read(CHUNK))
     except ConnectionClosed:
         raise ConnectionClosed
+    await asyncio.sleep(0)
     pass
 
 async def listener_handler(websocket):
-    # while True:
     # global output_stream
+    await asyncio.sleep(0)
     while True:
         async for data in websocket:
             try:
                 # await websocket.send("Hello world!")
                 # data = await websocket.recv()
-                frames_recv.put(data)
+                try:
+                    frames_recv.put_nowait(data)
+                except:
+                    pass
+                # fr_list.append(data)
                 # output_stream.write(data)
                 # This break statement makes the chat functionality work for local.
                 # Unless you move things to new threads or make buffers, KEEP THIS FOR LOCAL TESTING.
                 # break
             except ConnectionClosed:
                 raise ConnectionClosed
+    pass
+
+async def radio_caster_handler(websocket):
+    global input_stream
+    # while True:
+    # await asyncio.sleep(0)
+    try:
+        await websocket.send(input_stream.read(CHUNK))
+    except ConnectionClosed:
+        raise ConnectionClosed
+    # await asyncio.sleep(0)
     pass
 
 async def radio_listener_handler(websocket):
@@ -125,6 +137,17 @@ async def radio_listener_handler(websocket):
         except ConnectionClosed:
             raise ConnectionClosed
 
+async def new_listener_handler(websocket):
+    # Reimplemented the functionality for "async for ... in websocket"
+    # https://github.com/python-websockets/websockets/blob/16.0/src/websockets/asyncio/connection.py#L230-L246
+    # In our version, we want to receive and write continuously without blocking casting.
+    await asyncio.sleep(0)
+    try:
+        # while True:
+        data = await websocket.recv()
+        output_stream.write(data)
+    except ConnectionClosedOK:
+        return
 
 async def handler(request_packet):
     global USER_STATE
@@ -155,11 +178,14 @@ async def handler(request_packet):
         if USER_STATE == ServerResp.CHAT_OK:
             # Cast and Listen permissions both active.
             try:
-                # cast_task = asyncio.create_task(caster_handler(websocket))
-                listen_task = asyncio.create_task(listener_handler(websocket))
                 while True:
-                    await caster_handler(websocket)
-                    await pop_frames()
+                    listen_task = asyncio.create_task(new_listener_handler(websocket))
+                    cast_task = asyncio.create_task(caster_handler(websocket))
+                    done, pending = await asyncio.wait([listen_task, cast_task],
+                                       # timeout=1,
+                                       return_when=asyncio.FIRST_COMPLETED)
+                    for task in pending:
+                        task.cancel()
             except ConnectionClosed:
                 print("Closed from chatting.")
                 continue
@@ -168,7 +194,7 @@ async def handler(request_packet):
                 while True:
                 # await caster_handler(websocket)
                 # await websocket.send("Hello world!")
-                    await caster_handler(websocket)
+                    await radio_caster_handler(websocket)
                     # await websocket.send(data)
                 # message = await websocket.recv()
                 # print(message)
