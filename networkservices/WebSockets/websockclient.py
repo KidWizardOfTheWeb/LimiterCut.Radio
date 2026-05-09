@@ -2,11 +2,7 @@
 import os
 import sys
 import json
-import threading
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from threading import Thread
-from queue import Queue
 
 from environ import ImproperlyConfigured
 import environ # For reading environment variables
@@ -70,17 +66,6 @@ output_stream = p.open(format=FORMAT,
                        output=True,
                        frames_per_buffer=CHUNK)
 
-# We append our sent/received frames here as a way to create buffer and prevent choppy audio for chat rooms.
-frames_sent = Queue()
-frames_recv = Queue()
-
-async def pop_frames():
-    global output_stream
-    while not frames_recv.empty():
-        output_stream.write(frames_recv.get())
-        pass
-    pass
-
 async def caster_handler(websocket):
     global input_stream
     # while True:
@@ -90,27 +75,6 @@ async def caster_handler(websocket):
     except ConnectionClosed:
         raise ConnectionClosed
     await asyncio.sleep(0)
-    pass
-
-async def listener_handler(websocket):
-    # global output_stream
-    await asyncio.sleep(0)
-    while True:
-        async for data in websocket:
-            try:
-                # await websocket.send("Hello world!")
-                # data = await websocket.recv()
-                try:
-                    frames_recv.put_nowait(data)
-                except:
-                    pass
-                # fr_list.append(data)
-                # output_stream.write(data)
-                # This break statement makes the chat functionality work for local.
-                # Unless you move things to new threads or make buffers, KEEP THIS FOR LOCAL TESTING.
-                # break
-            except ConnectionClosed:
-                raise ConnectionClosed
     pass
 
 async def radio_caster_handler(websocket):
@@ -128,12 +92,7 @@ async def radio_listener_handler(websocket):
     global output_stream
     async for data in websocket:
         try:
-            # await websocket.send("Hello world!")
-            # data = await websocket.recv()
             output_stream.write(data)
-            # await websocket.send(data)
-            # print(message)
-            # await asyncio.sleep(1)
         except ConnectionClosed:
             raise ConnectionClosed
 
@@ -143,7 +102,6 @@ async def new_listener_handler(websocket):
     # In our version, we want to receive and write continuously without blocking casting.
     await asyncio.sleep(0)
     try:
-        # while True:
         data = await websocket.recv()
         output_stream.write(data)
     except ConnectionClosedOK:
@@ -181,13 +139,18 @@ async def handler(request_packet):
                 while True:
                     listen_task = asyncio.create_task(new_listener_handler(websocket))
                     cast_task = asyncio.create_task(caster_handler(websocket))
-                    done, pending = await asyncio.wait([listen_task, cast_task],
-                                       # timeout=1,
-                                       return_when=asyncio.FIRST_COMPLETED)
+                    done, pending = await asyncio.wait(
+                        [listen_task, cast_task],
+                        # timeout=1,
+                        return_when=asyncio.FIRST_COMPLETED)
+
                     for task in pending:
                         task.cancel()
+
             except ConnectionClosed:
                 print("Closed from chatting.")
+                # Reset user state here to ask for permission to connect again.
+                USER_STATE = None
                 continue
         if USER_STATE == ServerResp.CAST_OK:
             try:
@@ -200,6 +163,7 @@ async def handler(request_packet):
                 # print(message)
             except ConnectionClosed:
                 print("Closed from casting.")
+                USER_STATE = None
                 continue
         elif USER_STATE == ServerResp.LISTEN_OK:
             try:
@@ -215,10 +179,11 @@ async def handler(request_packet):
                 # print(message)
             except ConnectionClosed:
                 print("Closed from listening.")
+                USER_STATE = None
                 continue
 
 
-
+# NOTE: deprecated for clientdriver instead. Use that script to run this in the future.
 if __name__ == "__main__":
     # Note: change this later to not be hardcoded and allow this to retrieve name and ID from an API
     # server_names = [(s_names.name, s_names.value) for s_names in ServerID]
@@ -246,14 +211,11 @@ if __name__ == "__main__":
         "server_id": ServerID.MS,
         "channel_id": channel_id,
         "channel_type": channel_type
-        # "user_name": "" # Add this later for the server to visibly show who's casting.
+        # "user_name": "" # Add this later for the server to visibly show who's casting, redis management, etc.
     }
 
+    # Create json-request
     json_req = json.dumps(channel_request_pack)
-
-
-    # Implement pyaudio threads here instead of in our async tasks
-    # ...
 
     # Call channel connection and run async tasks
     asyncio.run(handler(json_req))
