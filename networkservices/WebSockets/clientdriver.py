@@ -21,11 +21,11 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 # Try to put in an ip for the server to connect to. If none, do localhost instead for local testing.
 try:
-    serverName = env("CLIENT_SERVER")
+    default_server_name = env("CLIENT_SERVER")
 except ImproperlyConfigured as e:
     print(e)
-    serverName = "localhost"
-serverPort = 3601
+    default_server_name = "localhost"
+default_server_port = 3601
 
 def request_a_channel(cli_args):
     # Note: change this later to not be hardcoded and allow this to retrieve name and ID from an API
@@ -38,6 +38,8 @@ def request_a_channel(cli_args):
     # print("Available channels:\n"
     #       "10.24 <-> 655.35")
 
+    server_name = cli_args.ServerName if cli_args.ServerName else default_server_name
+    server_port = cli_args.ServerPort if cli_args.ServerPort else default_server_port
     user_name = cli_args.Username if cli_args.Username else input("What's your username?\n")
     channel_id = cli_args.Channel if cli_args.Channel else input("Request access to an available channel, or type the name to a new one: ")
     channel_type = cli_args.Connecttype if cli_args.Connecttype else input("Request channel type (Radio, chat): ")
@@ -49,7 +51,7 @@ def request_a_channel(cli_args):
     # Uncomment this for local testing. Should make this a script arg in the future, honestly.
     # serverName = "localhost"
 
-    server_endpoint = "ws://" + serverName + ":" + str(serverPort)
+    server_endpoint = "ws://" + server_name + ":" + str(server_port)
     channel_request_pack = {
         "server_endpoint": str(server_endpoint),
         "server_id": ServerID.MS,
@@ -92,6 +94,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # Base info for connecting to the server, if the user chooses to add any of these flags on exec.
+    parser.add_argument("-servername", "--ServerName",
+                        help="Specify a server to connect to. If not provided, uses localhost if env file does not contain a valid entry for CLIENT_SERVER.")
+    parser.add_argument("-serverport", "--ServerPort",
+                        help="Specify a server port to connect to. If not provided, uses 3601 as default.")
     parser.add_argument("-username", "--Username",
                         help="Enters a username to use when connecting to the server. If not provided, user is prompted in CLI instead.")
     parser.add_argument("-channel", "--Channel",
