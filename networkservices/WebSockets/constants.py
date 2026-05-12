@@ -18,6 +18,17 @@ class ServerID(str, Enum):
     TF = "Triforce"
 
 
+# Dictionary of commands users can enter in their redis chat and what they do.
+slash_commands = {
+    "whoami": "Username is: {}",
+    "devicelist": "{}",
+    "getinputdevice": "{}",
+    "setinputdevice": "{}",
+    "getoutputdevice": "{}",
+    "setoutputdevice": "{}"
+}
+
+
 # NOTE: below this comment is from the websockets example, ignore this for now (unused).
 # But feel free to refactor in the future when we want to keep data on each channel instance (highly likely!)
 __all__ = ["PLAYER1", "PLAYER2", "Connect4"]
