@@ -22,6 +22,9 @@ else:
 import asyncio
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
+import base64
+
+from clientclass import ClientObject
 
 # Set up .env
 BASE_DIR = Path(__file__).resolve().parent
@@ -45,67 +48,112 @@ serverPort = 3601
 
 # Audio I/O streams
 # TODO: add stream for desktop audio with wpatch.
-CHUNK = BUFFER_SIZE
-FORMAT = pyaudio.paInt16
-CHANNELS = 2
-RATE = 48000
-p = pyaudio.PyAudio()
-input_stream = p.open(format=FORMAT,
-                      channels=CHANNELS,
-                      rate=RATE,
-                      input=True,
-                      frames_per_buffer=CHUNK,
-                      # stream_callback=input_callback
-                      )
 
 USER_STATE = None
 
-output_stream = p.open(format=FORMAT,
-                       channels=CHANNELS,
-                       rate=RATE,
-                       output=True,
-                       frames_per_buffer=CHUNK)
-
-async def caster_handler(websocket):
-    global input_stream
+async def chat_caster_handler(websocket):
+    # global input_stream
     # while True:
     await asyncio.sleep(0)
     try:
-        await websocket.send(input_stream.read(CHUNK))
+        # Send a packet with the username recorded for our hash-layered stream protocol (still working on the name)
+        # MUST BE SENT AS A TEXT-FRAME (JSON string)
+
+        # Get out input audio chunk
+        audio_chunk = ClientObject.input_stream.read(BUFFER_SIZE)
+
+        # Create our data packet
+        LC_audio_packet = {
+            "user_name": ClientObject.json_req["user_name"],
+            "audio_data": base64.b64encode(audio_chunk).decode()
+        }
+
+        # Dump the string
+        json_rep = json.dumps(LC_audio_packet)
+
+        # Send to websocket.
+        await websocket.send(json_rep)
     except ConnectionClosed:
         raise ConnectionClosed
     await asyncio.sleep(0)
     pass
 
-async def radio_caster_handler(websocket):
-    global input_stream
-    # while True:
-    # await asyncio.sleep(0)
-    try:
-        await websocket.send(input_stream.read(CHUNK))
-    except ConnectionClosed:
-        raise ConnectionClosed
-    # await asyncio.sleep(0)
-    pass
-
-async def radio_listener_handler(websocket):
-    global output_stream
-    async for data in websocket:
-        try:
-            output_stream.write(data)
-        except ConnectionClosed:
-            raise ConnectionClosed
-
-async def new_listener_handler(websocket):
+async def chat_listener_handler(websocket):
     # Reimplemented the functionality for "async for ... in websocket"
     # https://github.com/python-websockets/websockets/blob/16.0/src/websockets/asyncio/connection.py#L230-L246
     # In our version, we want to receive and write continuously without blocking casting.
     await asyncio.sleep(0)
     try:
         data = await websocket.recv()
-        output_stream.write(data)
+
+        # Load our data packet
+        json_packet = json.loads(data)
+
+        # The actual data itself
+        audio_chunk = json_packet["audio_data"]
+        audio_chunk = base64.b64decode(audio_chunk)
+
+        # This is the user who sent in the data
+        from_user_name = json_packet["user_name"]
+        if ClientObject.user_streams.get(from_user_name, None) is None:
+            ClientObject.user_streams[from_user_name] = list()
+        ClientObject.user_streams[from_user_name].append(audio_chunk)
+
+        # The write to output function
+        ClientObject.output_stream.write(audio_chunk)
     except ConnectionClosedOK:
         return
+
+async def radio_caster_handler(websocket):
+    # global input_stream
+    # while True:
+    # await asyncio.sleep(0)
+    try:
+        # Send a packet with the username recorded for our hash-layered stream protocol (still working on the name)
+        # MUST BE SENT AS A TEXT-FRAME (JSON string)
+
+        # Get out input audio chunk
+        audio_chunk = ClientObject.input_stream.read(BUFFER_SIZE)
+
+        # Create our data packet
+        LC_audio_packet = {
+            "user_name": ClientObject.json_req["user_name"],
+            "audio_data": base64.b64encode(audio_chunk).decode()
+        }
+
+        # Dump the string
+        json_rep = json.dumps(LC_audio_packet)
+
+        # Send to websocket.
+        await websocket.send(json_rep)
+    except ConnectionClosed:
+        raise ConnectionClosed
+    # await asyncio.sleep(0)
+    pass
+
+async def radio_listener_handler(websocket):
+    # global output_stream
+    async for data in websocket:
+        try:
+            # Load our data packet
+            json_packet = json.loads(data)
+
+            # The actual data itself
+            audio_chunk = json_packet["audio_data"]
+            audio_chunk = base64.b64decode(audio_chunk)
+
+            # This is the user who sent in the data.
+            # For each unique name, add a new entry to our user_streams dict and record packets.
+            # Each packet goes into our list for our user
+            from_user_name = json_packet["user_name"]
+            if ClientObject.user_streams.get(from_user_name, None) is None:
+                ClientObject.user_streams[from_user_name] = list()
+            ClientObject.user_streams[from_user_name].append(audio_chunk)
+
+            # The write to output function
+            ClientObject.output_stream.write(audio_chunk)
+        except ConnectionClosed:
+            raise ConnectionClosed
 
 async def handler(request_packet):
     global USER_STATE
@@ -137,8 +185,9 @@ async def handler(request_packet):
             # Cast and Listen permissions both active.
             try:
                 while True:
-                    listen_task = asyncio.create_task(new_listener_handler(websocket))
-                    cast_task = asyncio.create_task(caster_handler(websocket))
+                    # TODO: move the output_stream.write() functionality to audioprocessing.py
+                    listen_task = asyncio.create_task(chat_listener_handler(websocket))
+                    cast_task = asyncio.create_task(chat_caster_handler(websocket))
                     done, pending = await asyncio.wait(
                         [listen_task, cast_task],
                         # timeout=1,
@@ -182,8 +231,8 @@ async def handler(request_packet):
                 USER_STATE = None
                 continue
 
-
-# NOTE: deprecated for clientdriver instead. Use that script to run this in the future.
+# [[deprecated]]
+# NOTE: deprecated for clientdriver.py instead. Use that script to run this file in the future.
 if __name__ == "__main__":
     # Note: change this later to not be hardcoded and allow this to retrieve name and ID from an API
     # server_names = [(s_names.name, s_names.value) for s_names in ServerID]

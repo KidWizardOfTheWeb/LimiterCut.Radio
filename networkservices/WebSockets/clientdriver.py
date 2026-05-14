@@ -4,11 +4,11 @@ import json
 from pathlib import Path
 from environ import ImproperlyConfigured
 import environ # For reading environment variables
-from constants import ServerID
 import asyncio
 import argparse
 
 # Our imports
+from clientclass import *
 import websockclient
 import redisclient
 
@@ -77,8 +77,10 @@ async def main_runner(json_req):
     """
 
     async_funcs = await asyncio.gather(
+        # configreader.handler(),
         websockclient.handler(json_req),
         redisclient.handler(json_req)
+        # audioprocessing.handler()
     )
     pass
 
@@ -120,10 +122,14 @@ if __name__ == "__main__":
         # configreader.py WIP.
 
 
-    # Create json-request
+    # Create json-request.
     json_req = json.dumps(request_a_channel(args))
 
+    # Store in clientclass.
+    ClientObject.json_req = json.loads(json_req)
+
     # Now, call our async services and run async tasks.
+    # Note: maybe allow the user to choose to turn off certain services? Like redis chat.
     try:
         asyncio.run(main_runner(json_req))
     except KeyboardInterrupt as e:
