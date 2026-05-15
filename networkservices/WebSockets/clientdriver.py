@@ -11,6 +11,7 @@ import argparse
 from clientclass import *
 import websockclient
 import redisclient
+import audioprocessing
 
 # Set up .env
 BASE_DIR = Path(__file__).resolve().parent
@@ -79,8 +80,8 @@ async def main_runner(json_req):
     async_funcs = await asyncio.gather(
         # configreader.handler(),
         websockclient.handler(json_req),
-        redisclient.handler(json_req)
-        # audioprocessing.handler()
+        audioprocessing.mix_stored_packets(),
+        redisclient.handler(json_req),
     )
     pass
 

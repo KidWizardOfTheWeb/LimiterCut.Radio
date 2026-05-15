@@ -97,7 +97,9 @@ async def chat_listener_handler(websocket):
         from_user_name = json_packet["user_name"]
         if ClientObject.user_streams.get(from_user_name, None) is None:
             ClientObject.user_streams[from_user_name] = list()
-        ClientObject.user_streams[from_user_name].append(audio_chunk)
+
+        # NOTE: to test this function, comment this line below back in and comment out the write function under it.
+        # ClientObject.user_streams[from_user_name].append(audio_chunk)
 
         # The write to output function
         ClientObject.output_stream.write(audio_chunk)
@@ -148,7 +150,9 @@ async def radio_listener_handler(websocket):
             from_user_name = json_packet["user_name"]
             if ClientObject.user_streams.get(from_user_name, None) is None:
                 ClientObject.user_streams[from_user_name] = list()
-            ClientObject.user_streams[from_user_name].append(audio_chunk)
+
+            # NOTE: to test this function, comment this line below back in and comment out the write function under it.
+            # ClientObject.user_streams[from_user_name].append(audio_chunk)
 
             # The write to output function
             ClientObject.output_stream.write(audio_chunk)
