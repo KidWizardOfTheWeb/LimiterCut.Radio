@@ -84,10 +84,21 @@ async def writer(redis_channel, request_packet):
 async def handler(request_packet):
     r = redis.Redis(host=env("CLIENT_SERVER"), port=6379)
 
+    # Parse JSON-String to dict.
     json_pack = json.loads(request_packet)
 
     async with r.pubsub() as pubsub:
-        await pubsub.subscribe(json_pack["channel_id"])
+        try:
+            # Try to subscribe to the channel.
+            await pubsub.subscribe(json_pack["channel_id"])
+
+            # If successful, let everyone know you've joined!
+            await r.publish(json_pack["channel_id"], str(json_pack["user_name"] + " has joined the channel!"))
+        except Exception as e:
+            # pass
+            print(e)
+            print("Redis pub/sub server cannot be reached. Canceling service activation.")
+            return
 
         # Run both, return when one of these is completed.
         while True:
