@@ -1,5 +1,7 @@
 # WIP
-# Intended to parse packets received from clients and overlay them using ffmpeg
+# Intended to parse packets received from clients as separate stream objects and overlay them using ffmpeg
+from asyncio import QueueEmpty
+
 import ffmpeg
 from clientclass import ClientObject
 import asyncio
@@ -10,12 +12,13 @@ async def mix_stored_packets():
         if ClientObject.user_streams:
             # If this has entries, get the lists (audio streams intake) off each user and play it.
             for audio_list in ClientObject.user_streams.values():
-                # > BUFFER
-                # NOTE: this really doesn't work as well as it did in my head.
-                # There's too much blocking, and buffer being arbitrary instead of adaptive really puts a damper on it.
-                # What also happens is that if someone is passing in packets and there's too many,
-                # incoming packets are DEMOLISHED (popped) before even playing, rather than playing first, then destroying.
-                if len(audio_list) > 30:
-                    ClientObject.output_stream.write(audio_list.pop())
+                # Using queues, we can push and pop properly.
+                # In the future, for each queue, we want to make an input object with ffmpeg and mix them down into one output.
+                # If this idea works, this should solve this implementation short-term before WebRTC becomes the main one.
+                try:
+                    frame = audio_list.get_nowait()
+                    ClientObject.output_stream.write(frame)
+                except QueueEmpty as e:
+                    pass
             pass
     pass

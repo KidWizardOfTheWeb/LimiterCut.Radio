@@ -1,6 +1,7 @@
 # All of our services up here are intended to be ran in clientdriver.py
 import sys
 from constants import BUFFER_SIZE, ServerResp, ServerID
+from asyncio import Queue
 
 # Different platforms require different implementations.
 if sys.platform == "win32":
@@ -24,7 +25,7 @@ class ClientObject:
     json_req = {}
 
     # Store other details as needed.
-    user_streams = {str: list()}
+    user_streams = {str: Queue()}
 
     # Stream instance
     p = pyaudio.PyAudio()
