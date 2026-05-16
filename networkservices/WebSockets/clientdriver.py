@@ -136,4 +136,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt as e:
         # Remove this except to make debugging more verbose.
         print("Keyboard Interrupt closed LC-Radio.")
+    except Exception as e:
+        print(e)
 
