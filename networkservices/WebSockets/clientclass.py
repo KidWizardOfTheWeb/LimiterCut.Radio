@@ -1,7 +1,8 @@
 # All of our services up here are intended to be ran in clientdriver.py
 import sys
 from constants import BUFFER_SIZE, ServerResp, ServerID
-from asyncio import Queue
+from asyncio import Queue, queues
+import functools
 
 # Different platforms require different implementations.
 if sys.platform == "win32":
@@ -18,17 +19,59 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 48000
 
+def output_callback(from_user, in_data, frame_count, time_info, status):
+    # Get the specific user stream, consume it if available
+    audio_stream = ClientObject.user_streams.get(from_user, None)
+    if audio_stream is None:
+        return (bytes(2496), pyaudio.paContinue)
+    try:
+        raw_audio_bytes = audio_stream.get_nowait()
+    except queues.QueueEmpty as e:
+        print(e)
+        return (bytes(2496), pyaudio.paContinue)
+    return (raw_audio_bytes, pyaudio.paContinue)
+
+class UserStreamsDict(dict):
+    def __setitem__(self, key, value):
+        if key not in self:
+            # Create new ffmpeg process
+
+            print(f"New user stream from: '{key}' added!")
+        super().__setitem__(key, value)
+    pass
+
+class UserObjectsDict(dict):
+    def __setitem__(self, key, value):
+        if key not in self:
+            # p = pyaudio.PyAudio()
+            # # Create new ffmpeg process
+            # value = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
+            print(f"New user object from: '{key}' added!")
+        super().__setitem__(key, value)
+    pass
+
 # This class is our "god" class. Instead of shared memory with multiprocessing, this should make an object that makes this easier.
 class ClientObject:
     # def __init__(self, json_req):
     # Store our original request here as a dict
     json_req = {}
 
-    # Store other details as needed.
-    user_streams = {str: Queue()}
-
     # Stream instance
     p = pyaudio.PyAudio()
+
+    # Store other details as needed.
+    user_streams = UserStreamsDict()
+
+    user_objects = UserObjectsDict()
+    # {str: Queue()}
+
+    @classmethod
+    def add_new_output_stream(cls, user_to_add):
+        if user_to_add not in cls.user_objects.keys():
+            # Create new ffmpeg process
+            new_stream = cls.p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK, stream_callback=functools.partial(output_callback, user_to_add))
+            cls.user_objects[user_to_add] = new_stream
+        pass
 
     # Store pointers to our input/output devices.
     # By having the indexes on demand, we can redefine our streams as needed for other devices
@@ -47,7 +90,7 @@ class ClientObject:
         cls.input_index = new_input_idx
         pass
 
-    output_stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
+    # output_stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
     output_index = p.get_default_output_device_info()['index']
 
     @classmethod
@@ -61,7 +104,7 @@ class ClientObject:
                       channels=CHANNELS,
                       rate=RATE,
                       out=True,
-                      input_device_index = new_output_idx,
+                      output_device_index = new_output_idx,
                       frames_per_buffer=CHUNK)
         cls.input_index = new_output_idx
         pass

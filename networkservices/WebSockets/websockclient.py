@@ -3,6 +3,7 @@ import os
 import sys
 import json
 from pathlib import Path
+import functools
 
 from environ import ImproperlyConfigured
 import environ # For reading environment variables
@@ -97,9 +98,15 @@ async def chat_listener_handler(websocket):
         from_user_name = json_packet["user_name"]
         if ClientObject.user_streams.get(from_user_name, None) is None:
             ClientObject.user_streams[from_user_name] = asyncio.Queue()
-
+            ClientObject.user_streams[from_user_name].put_nowait(audio_chunk)
+            ClientObject.add_new_output_stream(from_user_name)
+            # ClientObject.user_objects[from_user_name].start_stream()
+            # ClientObject.add_new_output_stream("DUMMY")
+            # ClientObject.user_streams["DUMMY"] = asyncio.Queue()
+        else:
         # NOTE: to test this function, comment this line below back in and comment out the write function under it.
-        ClientObject.user_streams[from_user_name].put_nowait(audio_chunk)
+            ClientObject.user_streams[from_user_name].put_nowait(audio_chunk)
+        # ClientObject.user_streams["DUMMY"].put_nowait(audio_chunk)
 
         # The write to output function
         # ClientObject.output_stream.write(audio_chunk)
@@ -150,6 +157,7 @@ async def radio_listener_handler(websocket):
             from_user_name = json_packet["user_name"]
             if ClientObject.user_streams.get(from_user_name, None) is None:
                 ClientObject.user_streams[from_user_name] = asyncio.Queue()
+                ClientObject.add_new_output_stream(from_user_name)
 
             # NOTE: to test this function, comment this line below back in and comment out the write function under it.
             ClientObject.user_streams[from_user_name].put_nowait(audio_chunk)

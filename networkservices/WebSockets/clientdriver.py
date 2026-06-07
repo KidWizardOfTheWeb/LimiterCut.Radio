@@ -80,7 +80,7 @@ async def main_runner(json_req):
     async_funcs = await asyncio.gather(
         # configreader.handler(),
         websockclient.handler(json_req),
-        audioprocessing.mix_stored_packets(),
+        # audioprocessing.mix_stored_packets(),
         redisclient.handler(json_req),
     )
     pass
