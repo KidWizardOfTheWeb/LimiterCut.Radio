@@ -66,6 +66,21 @@ class ClientObject:
     # {str: Queue()}
 
     @classmethod
+    def generate_outbound_audio_packet(cls, input_audio):
+        # Generate bytearray for header, append audio at the end.
+        header_data = bytearray(32)
+        header_data[0:32] = bytearray(cls.json_req["user_id"], 'utf-8')
+        header_data[32:48] = bytearray(cls.json_req["user_name"], 'utf-8')
+
+        user_name_len = len(cls.json_req["user_name"])
+        header_data.extend(bytearray(16-user_name_len))
+        header_data.extend(input_audio)
+
+        outbound_packet = bytes(header_data)
+
+        return outbound_packet
+
+    @classmethod
     def add_new_output_stream(cls, user_to_add):
         if user_to_add not in cls.user_objects.keys():
             # Create new ffmpeg process

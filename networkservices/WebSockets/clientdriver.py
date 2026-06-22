@@ -6,6 +6,7 @@ from environ import ImproperlyConfigured
 import environ # For reading environment variables
 import asyncio
 import argparse
+import uuid
 
 # Our imports
 from clientclass import *
@@ -42,6 +43,11 @@ def request_a_channel(cli_args):
     server_name = cli_args.ServerName if cli_args.ServerName else default_server_name
     server_port = cli_args.ServerPort if cli_args.ServerPort else default_server_port
     user_name = cli_args.Username if cli_args.Username else input("What's your username?\n")
+
+    while len(user_name) > 16:
+        # Name length cannot be greater than 16 characters.
+        user_name = input("Username cannot be longer than 16 characters. Enter new username:\n")
+
     channel_id = cli_args.Channel if cli_args.Channel else input("Request access to an available channel, or type the name to a new one: ")
     channel_type = cli_args.Connecttype if cli_args.Connecttype else input("Request channel type (Radio, chat): ")
     print("Requesting channel access to the server and waiting for approval...")
@@ -58,7 +64,8 @@ def request_a_channel(cli_args):
         "server_id": ServerID.MS,
         "channel_id": channel_id,
         "channel_type": channel_type,
-        "user_name": user_name # Add this later for the server to visibly show who's casting, redis management, etc.
+        "user_name": user_name, # Add this later for the server to visibly show who's casting, redis management, etc.
+        "user_id": uuid.uuid4().hex # GUID for a user in bytes (32 len)
     }
 
     return channel_request_pack

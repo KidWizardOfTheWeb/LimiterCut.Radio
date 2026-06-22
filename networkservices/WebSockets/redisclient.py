@@ -97,7 +97,7 @@ async def handler(request_packet):
         except Exception as e:
             # pass
             print(e)
-            print("Redis pub/sub server cannot be reached. Canceling service activation.")
+            print("Redis pub/sub server cannot be reached. Skipping chat service activation...")
             return
 
         # Run both, return when one of these is completed.

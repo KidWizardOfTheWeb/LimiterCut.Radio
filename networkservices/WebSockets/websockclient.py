@@ -64,16 +64,10 @@ async def chat_caster_handler(websocket):
         audio_chunk = ClientObject.input_stream.read(BUFFER_SIZE)
 
         # Create our data packet
-        LC_audio_packet = {
-            "user_name": ClientObject.json_req["user_name"],
-            "audio_data": base64.b64encode(audio_chunk).decode()
-        }
-
-        # Dump the string
-        json_rep = json.dumps(LC_audio_packet)
+        LC_audio_packet = ClientObject.generate_outbound_audio_packet(audio_chunk)
 
         # Send to websocket.
-        await websocket.send(json_rep)
+        await websocket.send(LC_audio_packet, text=False)
     except ConnectionClosed:
         raise ConnectionClosed
     await asyncio.sleep(0)
@@ -86,26 +80,27 @@ async def chat_listener_handler(websocket):
     await asyncio.sleep(0)
     try:
         data = await websocket.recv()
+        # print(websocket.latency)
 
-        # Load our data packet
-        json_packet = json.loads(data)
+        # Load our data packet (this is bytes)
 
         # The actual data itself
-        audio_chunk = json_packet["audio_data"]
-        audio_chunk = base64.b64decode(audio_chunk)
+        audio_chunk = data[48:]
 
         # This is the user who sent in the data
-        from_user_name = json_packet["user_name"]
-        if ClientObject.user_streams.get(from_user_name, None) is None:
-            ClientObject.user_streams[from_user_name] = asyncio.Queue()
-            ClientObject.user_streams[from_user_name].put_nowait(audio_chunk)
-            ClientObject.add_new_output_stream(from_user_name)
+        # We use UUIDs, in case people end up with the same usernames
+        # from_user_name = data["user_name"]
+        from_guid = data[0:32]
+        if ClientObject.user_streams.get(from_guid, None) is None:
+            ClientObject.user_streams[from_guid] = asyncio.Queue()
+            ClientObject.user_streams[from_guid].put_nowait(audio_chunk)
+            ClientObject.add_new_output_stream(from_guid)
             # ClientObject.user_objects[from_user_name].start_stream()
             # ClientObject.add_new_output_stream("DUMMY")
             # ClientObject.user_streams["DUMMY"] = asyncio.Queue()
         else:
         # NOTE: to test this function, comment this line below back in and comment out the write function under it.
-            ClientObject.user_streams[from_user_name].put_nowait(audio_chunk)
+            ClientObject.user_streams[from_guid].put_nowait(audio_chunk)
         # ClientObject.user_streams["DUMMY"].put_nowait(audio_chunk)
 
         # The write to output function
