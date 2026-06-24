@@ -74,39 +74,35 @@ async def chat_caster_handler(websocket):
     pass
 
 async def chat_listener_handler(websocket):
-    # Reimplemented the functionality for "async for ... in websocket"
-    # https://github.com/python-websockets/websockets/blob/16.0/src/websockets/asyncio/connection.py#L230-L246
-    # In our version, we want to receive and write continuously without blocking casting.
     await asyncio.sleep(0)
-    try:
-        data = await websocket.recv()
-        # print(websocket.latency)
 
-        # Load our data packet (this is bytes)
+    # Asynchronously retrieves every message as they come in from the socket, preventing output blocking for chats.
+    async for data in websocket:
+        try:
+            # The actual data itself
+            audio_chunk = data[48:]
 
-        # The actual data itself
-        audio_chunk = data[48:]
+            # This is the user who sent in the data
+            # We use UUIDs, in case people end up with the same usernames
+            # from_user_name = data["user_name"]
+            from_guid = data[0:32]
+            if ClientObject.user_streams.get(from_guid, None) is None:
+                ClientObject.user_streams[from_guid] = asyncio.Queue()
+                ClientObject.user_streams[from_guid].put_nowait(audio_chunk)
+                ClientObject.add_new_output_stream(from_guid)
+                # ClientObject.user_objects[from_user_name].start_stream()
+                # ClientObject.add_new_output_stream("DUMMY")
+                # ClientObject.user_streams["DUMMY"] = asyncio.Queue()
+            else:
+                # NOTE: to test this function, comment this line below back in and comment out the write function under it.
+                ClientObject.user_streams[from_guid].put_nowait(audio_chunk)
+            # ClientObject.user_streams["DUMMY"].put_nowait(audio_chunk)
 
-        # This is the user who sent in the data
-        # We use UUIDs, in case people end up with the same usernames
-        # from_user_name = data["user_name"]
-        from_guid = data[0:32]
-        if ClientObject.user_streams.get(from_guid, None) is None:
-            ClientObject.user_streams[from_guid] = asyncio.Queue()
-            ClientObject.user_streams[from_guid].put_nowait(audio_chunk)
-            ClientObject.add_new_output_stream(from_guid)
-            # ClientObject.user_objects[from_user_name].start_stream()
-            # ClientObject.add_new_output_stream("DUMMY")
-            # ClientObject.user_streams["DUMMY"] = asyncio.Queue()
-        else:
-        # NOTE: to test this function, comment this line below back in and comment out the write function under it.
-            ClientObject.user_streams[from_guid].put_nowait(audio_chunk)
-        # ClientObject.user_streams["DUMMY"].put_nowait(audio_chunk)
-
-        # The write to output function
-        # ClientObject.output_stream.write(audio_chunk)
-    except ConnectionClosedOK:
-        return
+            # The write to output function
+            # ClientObject.output_stream.write(audio_chunk)
+        except ConnectionClosedOK:
+            return
+        pass
 
 async def radio_caster_handler(websocket):
     # global input_stream
