@@ -25,7 +25,8 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 try:
     default_server_name = env("CLIENT_SERVER")
 except ImproperlyConfigured as e:
-    print(e)
+    # print(e)
+    print(".env file not configured/found. Using localhost as default name.\nIf arg is used for server endpoint, ignore this message.\n")
     default_server_name = "localhost"
 default_server_port = 3601
 
@@ -58,9 +59,10 @@ def request_a_channel(cli_args):
     # Uncomment this for local testing. Should make this a script arg in the future, honestly.
     # serverName = "localhost"
 
-    server_endpoint = "ws://" + server_name + ":" + str(server_port)
+    server_websocket = "ws://" + server_name + ":" + str(server_port)
     channel_request_pack = {
-        "server_endpoint": str(server_endpoint),
+        "server_websocket": str(server_websocket),
+        "server_endpoint": str(server_name),
         "server_id": ServerID.MS,
         "channel_id": channel_id,
         "channel_type": channel_type,

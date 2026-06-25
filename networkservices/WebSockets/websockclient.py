@@ -35,17 +35,13 @@ env = environ.Env(
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 # Try to put in an ip for the server to connect to. If none, do localhost instead for local testing.
+# DEPRECATED, only used when ran as a single file.
 try:
     serverName = env("CLIENT_SERVER")
 except ImproperlyConfigured as e:
-    print(e)
+    print(".env file not configured/found. Using localhost as default name.\nIf arg is used for server endpoint, ignore this message.\n")
     serverName = "localhost"
 serverPort = 3601
-
-# def input_callback(in_data, frame_count, time_info, status):
-#     # places frames into queue
-#     frames_sent.put(in_data)
-#     return (in_data, pyaudio.paContinue)
 
 # Audio I/O streams
 # TODO: add stream for desktop audio with wpatch.
@@ -174,7 +170,7 @@ async def handler(request_packet):
     # TODO: use uri received from API if a server is searched for.
     # If a user has a history of servers and they want to find one, keep a list in some user data folder.
     # For now, this loads from the packet, which comes from the .env file.
-    server_uri = json.loads(request_packet)["server_endpoint"]
+    server_uri = json.loads(request_packet)["server_websocket"]
 
     # Perform casting/listening/other functions while connected.
     async for websocket in connect(server_uri):

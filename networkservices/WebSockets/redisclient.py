@@ -82,10 +82,10 @@ async def writer(redis_channel, request_packet):
     pass
 
 async def handler(request_packet):
-    r = redis.Redis(host=env("CLIENT_SERVER"), port=6379)
-
     # Parse JSON-String to dict.
     json_pack = json.loads(request_packet)
+
+    r = redis.Redis(host=json_pack["server_endpoint"], port=6379)
 
     async with r.pubsub() as pubsub:
         try:
