@@ -1,0 +1,10 @@
+[User]
+Username = RC_USER_XYZ
+
+[Server]
+servername = radio.reaperco.net
+serverport = 3601
+
+[Channel]
+channel = 1
+connecttype = chat

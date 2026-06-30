@@ -2,55 +2,45 @@
 import os
 import json
 from pathlib import Path
-from environ import ImproperlyConfigured
-import environ # For reading environment variables
 import asyncio
 import argparse
 import uuid
+import configparser
 
 # Our imports
 from clientclass import *
 import websockclient
 import redisclient
-import audioprocessing
+# import audioprocessing
 
-# Set up .env
-BASE_DIR = Path(__file__).resolve().parent
-env = environ.Env(
-    DEBUG=(bool, False)
-)
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
-
-# Try to put in an ip for the server to connect to. If none, do localhost instead for local testing.
-try:
-    default_server_name = env("CLIENT_SERVER")
-except ImproperlyConfigured as e:
-    # print(e)
-    print(".env file not configured/found. Using localhost as default name.\nIf arg is used for server endpoint, ignore this message.\n")
-    default_server_name = "localhost"
+# Our defaults for no params/config details
+default_server_name = "localhost"
 default_server_port = 3601
+default_username = "UndefUser"
 
-def request_a_channel(cli_args):
+def request_a_channel(config_dict: dict):
     # Note: change this later to not be hardcoded and allow this to retrieve name and ID from an API
     # server_names = [(s_names.name, s_names.value) for s_names in ServerID]
     # print("Available servers:")
     # print(*server_names, sep='\n')
 
-    # server_id = input("Request access to an available server: ")
-
-    # print("Available channels:\n"
-    #       "10.24 <-> 655.35")
-
-    server_name = cli_args.ServerName if cli_args.ServerName else default_server_name
-    server_port = cli_args.ServerPort if cli_args.ServerPort else default_server_port
-    user_name = cli_args.Username if cli_args.Username else input("What's your username?\n")
+    # Uses details from the parsed arguments and retrieves them, otherwise using defaults.
+    server_name = config_dict.get("servername", default_server_name)
+    server_port = config_dict.get("serverport", default_server_port)
+    user_name = config_dict.get("username", default_username)
 
     while len(user_name) > 16:
         # Name length cannot be greater than 16 characters.
         user_name = input("Username cannot be longer than 16 characters. Enter new username:\n")
 
-    channel_id = cli_args.Channel if cli_args.Channel else input("Request access to an available channel, or type the name to a new one: ")
-    channel_type = cli_args.Connecttype if cli_args.Connecttype else input("Request channel type (Radio, chat): ")
+    channel_id = config_dict.get("channel", None)
+    if not channel_id:
+        channel_id = input("Request access to an available channel, or type the name to a new one: ")
+
+    channel_type = config_dict.get("connecttype", None)
+    while not channel_type and channel_type != "radio".casefold() and channel_type != "chat".casefold():
+        channel_type = input("Request channel type (Radio, chat): ")
+
     print("Requesting channel access to the server and waiting for approval...")
 
     # TODO: Allow the user to choose a server first.
@@ -105,35 +95,52 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
 
+    # Config file support, this should be a direct file path to it.
+    parser.add_argument("-config", "--config",
+                        help="Path to config file. Uses a preset config file to connect to a specific channel and server as a specific user.")
+
     # Base info for connecting to the server, if the user chooses to add any of these flags on exec.
-    parser.add_argument("-servername", "--ServerName",
-                        help="Specify a server to connect to. If not provided, uses localhost if env file does not contain a valid entry for CLIENT_SERVER.")
-    parser.add_argument("-serverport", "--ServerPort",
+    parser.add_argument("-ServerName", "--servername",
+                        help="Specify a server to connect to. If not provided, uses localhost.")
+    parser.add_argument("-ServerPort", "--serverport",
                         help="Specify a server port to connect to. If not provided, uses 3601 as default.")
-    parser.add_argument("-username", "--Username",
+    parser.add_argument("-Username", "--username",
                         help="Enters a username to use when connecting to the server. If not provided, user is prompted in CLI instead.")
-    parser.add_argument("-channel", "--Channel",
+    parser.add_argument("-Channel", "--channel",
                         help="Enters a channel to connect to on a given server. If not provided, user is prompted in CLI instead.")
-    parser.add_argument("-connecttype", "--Connecttype",
+    parser.add_argument("-Connecttype", "--connecttype",
                         help="Chooses a connection type to a channel (radio/chat). If not provided, user is prompted in CLI instead.")
 
     # Extra settings
-    parser.add_argument("-GUI", "--GUI", default=False, action='store_true', help="Turns GUI (windows instead of CLI) on or off. Default is OFF.")
-    parser.add_argument("-useconfig", "--Useconfig", default=False, action='store_true', help="Uses a config file for details on I/O and other settings, otherwise uses defaults. Default is OFF.")
+    parser.add_argument("-GUI", "--gui", default=False, action='store_true', help="Turns GUI (windows instead of CLI) on or off. Default is OFF.")
     args = parser.parse_args()
 
-    if args.GUI:
+    if args.gui:
         print("GUI: ON.")
         # Add GUI hooks here (PyQt6 WIP).
 
-    if args.Useconfig:
-        print("Use config: ON")
-        # Add config ini hooks and loading here.
-        # configreader.py WIP.
+    # Convert args to dictionary
+    config_dict = vars(args)
+
+    # If no args, use a config file passed in.
+    if args.config:
+        config_data = configparser.ConfigParser()
+        try:
+            config_data.read(args.config)
+            # For each section,
+            # Replace each field with the config variants.
+            for section in config_data.sections():
+                for keys, vals in config_data.items(section):
+                    # Do replacements of args read from config here.
+                    config_dict[keys] = vals
+        except Exception as e:
+            print(e)
+            input("Continue execution?")
+            pass
 
 
     # Create json-request.
-    json_req = json.dumps(request_a_channel(args))
+    json_req = json.dumps(request_a_channel(config_dict))
 
     # Store in clientclass.
     ClientObject.json_req = json.loads(json_req)

@@ -6,8 +6,6 @@ from pathlib import Path
 import functools
 
 import websockets.exceptions
-from environ import ImproperlyConfigured
-import environ # For reading environment variables
 from constants import BUFFER_SIZE, ServerResp, ServerID
 
 # Different platforms require different implementations.
@@ -27,22 +25,6 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 import base64
 
 from clientclass import ClientObject
-
-# Set up .env
-BASE_DIR = Path(__file__).resolve().parent
-env = environ.Env(
-    DEBUG=(bool, False)
-)
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
-
-# Try to put in an ip for the server to connect to. If none, do localhost instead for local testing.
-# DEPRECATED, only used when ran as a single file.
-try:
-    serverName = env("CLIENT_SERVER")
-except ImproperlyConfigured as e:
-    print(".env file not configured/found. Using localhost as default name.\nIf arg is used for server endpoint, ignore this message.\n")
-    serverName = "localhost"
-serverPort = 3601
 
 # Audio I/O streams
 # TODO: add stream for desktop audio with wpatch.
