@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import functools
 
+import websockets.exceptions
 from environ import ImproperlyConfigured
 import environ # For reading environment variables
 from constants import BUFFER_SIZE, ServerResp, ServerID
@@ -57,6 +58,7 @@ async def chat_caster_handler(websocket):
         # MUST BE SENT AS A TEXT-FRAME (JSON string)
 
         # Get out input audio chunk
+        # NOTE: Switch this to a threaded version, so we can override.
         audio_chunk = ClientObject.input_stream.read(BUFFER_SIZE)
 
         # Create our data packet
@@ -154,6 +156,15 @@ async def radio_listener_handler(websocket):
         except ConnectionClosed:
             raise ConnectionClosed
 
+# Sends a ping and waits for pong.
+async def ping_checker(websocket, ping_interval=20):
+    await asyncio.sleep(0)
+    pong = await websocket.ping()
+    latency = await websocket.pong()
+    # print(pong)
+    # print(latency)
+    pass
+
 async def handler(request_packet):
     global USER_STATE
     # Start with API call endpoint, unless this is a self-hosted server.
@@ -172,13 +183,22 @@ async def handler(request_packet):
     # For now, this loads from the packet, which comes from the .env file.
     server_uri = json.loads(request_packet)["server_websocket"]
 
+    # Future notes:
+    # async with: will connect and perform what is inside of it. Will not attempt a reconnect on its own.
+    # async for: the same, but will attempt to reconnect on exit.
+
     # Perform casting/listening/other functions while connected.
     async for websocket in connect(server_uri):
         # First, connect to server and send the initial packet.
         # Packet includes channel requested, other information.
         if USER_STATE is None:
             await websocket.send(request_packet)
-            USER_STATE = await websocket.recv()
+            try:
+                USER_STATE = await websocket.recv()
+            except websockets.exceptions.ConnectionClosedError:
+                print(e)
+                print("Exiting websocket loop...")
+                break
             print(USER_STATE)
         if USER_STATE == ServerResp.CHAT_OK:
             # Cast and Listen permissions both active.
@@ -187,8 +207,9 @@ async def handler(request_packet):
                     # TODO: move the output_stream.write() functionality to audioprocessing.py
                     listen_task = asyncio.create_task(chat_listener_handler(websocket))
                     cast_task = asyncio.create_task(chat_caster_handler(websocket))
+                    ping_task = asyncio.create_task(ping_checker(websocket))
                     done, pending = await asyncio.wait(
-                        [listen_task, cast_task],
+                        [listen_task, cast_task, ping_task],
                         # timeout=1,
                         return_when=asyncio.FIRST_COMPLETED)
 
@@ -232,38 +253,38 @@ async def handler(request_packet):
 
 # [[deprecated]]
 # NOTE: deprecated for clientdriver.py instead. Use that script to run this file in the future.
-if __name__ == "__main__":
-    # Note: change this later to not be hardcoded and allow this to retrieve name and ID from an API
-    # server_names = [(s_names.name, s_names.value) for s_names in ServerID]
-    # print("Available servers:")
-    # print(*server_names, sep='\n')
-
-    # server_id = input("Request access to an available server: ")
-
-    print("Available channels:\n"
-          "10.24 <-> 655.35")
-
-    channel_id = input("Request access to an available channel: ")
-    channel_type = input("Request channel type (Radio, chat): ")
-    print("Requesting channel access to the server and waiting for approval...")
-
-    # TODO: Allow the user to choose a server first.
-    # Server set to Master System for now by default.
-
-    # Uncomment this for local testing. Should make this a script arg in the future, honestly.
-    # serverName = "localhost"
-
-    server_endpoint = "ws://" + serverName + ":" + str(serverPort)
-    channel_request_pack = {
-        "server_endpoint": str(server_endpoint),
-        "server_id": ServerID.MS,
-        "channel_id": channel_id,
-        "channel_type": channel_type
-        # "user_name": "" # Add this later for the server to visibly show who's casting, redis management, etc.
-    }
-
-    # Create json-request
-    json_req = json.dumps(channel_request_pack)
-
-    # Call channel connection and run async tasks
-    asyncio.run(handler(json_req))
+# if __name__ == "__main__":
+#     # Note: change this later to not be hardcoded and allow this to retrieve name and ID from an API
+#     # server_names = [(s_names.name, s_names.value) for s_names in ServerID]
+#     # print("Available servers:")
+#     # print(*server_names, sep='\n')
+#
+#     # server_id = input("Request access to an available server: ")
+#
+#     print("Available channels:\n"
+#           "10.24 <-> 655.35")
+#
+#     channel_id = input("Request access to an available channel: ")
+#     channel_type = input("Request channel type (Radio, chat): ")
+#     print("Requesting channel access to the server and waiting for approval...")
+#
+#     # Allow the user to choose a server first.
+#     # Server set to Master System for now by default.
+#
+#     # Uncomment this for local testing. Should make this a script arg in the future, honestly.
+#     # serverName = "localhost"
+#
+#     server_endpoint = "ws://" + serverName + ":" + str(serverPort)
+#     channel_request_pack = {
+#         "server_endpoint": str(server_endpoint),
+#         "server_id": ServerID.MS,
+#         "channel_id": channel_id,
+#         "channel_type": channel_type
+#         # "user_name": "" # Add this later for the server to visibly show who's casting, redis management, etc.
+#     }
+#
+#     # Create json-request
+#     json_req = json.dumps(channel_request_pack)
+#
+#     # Call channel connection and run async tasks
+#     asyncio.run(handler(json_req))

@@ -19,6 +19,12 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 48000
 
+
+def input_callback(in_data, frame_count, time_info, status):
+    # We can override input here, in case someone wants to stream something else directly like a soundbyte.
+    return (in_data, pyaudio.paContinue)
+
+# This has a functools.partial param in "from_user", where an ID is used for the dict to retrieve the stream queue.
 def output_callback(from_user, in_data, frame_count, time_info, status):
     # Get the specific user stream, consume it if available
     audio_stream = ClientObject.user_streams.get(from_user, None)
@@ -65,6 +71,14 @@ class ClientObject:
     user_objects = UserObjectsDict()
     # {str: Queue()}
 
+    # Store pointers to our input/output devices.
+    # By having the indexes on demand, we can redefine our streams as needed for other devices
+    input_stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+    input_index = p.get_default_input_device_info()['index']
+
+    # output_stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
+    output_index = p.get_default_output_device_info()['index']
+
     @classmethod
     def generate_outbound_audio_packet(cls, input_audio):
         # Generate bytearray for header, append audio at the end.
@@ -73,7 +87,7 @@ class ClientObject:
         header_data[32:48] = bytearray(cls.json_req["user_name"], 'utf-8')
 
         user_name_len = len(cls.json_req["user_name"])
-        header_data.extend(bytearray(16-user_name_len))
+        header_data.extend(bytearray(16 - user_name_len))
         header_data.extend(input_audio)
 
         outbound_packet = bytes(header_data)
@@ -84,14 +98,9 @@ class ClientObject:
     def add_new_output_stream(cls, user_to_add):
         if user_to_add not in cls.user_objects.keys():
             # Create new ffmpeg process
-            new_stream = cls.p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK, stream_callback=functools.partial(output_callback, user_to_add))
+            new_stream = cls.p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, output_device_index = cls.output_index, frames_per_buffer=CHUNK, stream_callback=functools.partial(output_callback, user_to_add))
             cls.user_objects[user_to_add] = new_stream
         pass
-
-    # Store pointers to our input/output devices.
-    # By having the indexes on demand, we can redefine our streams as needed for other devices
-    input_stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
-    input_index = p.get_default_input_device_info()['index']
 
     @classmethod
     def change_input_device(cls, new_input_idx):
@@ -104,9 +113,6 @@ class ClientObject:
                                       input_device_index = new_input_idx, frames_per_buffer=CHUNK)
         cls.input_index = new_input_idx
         pass
-
-    # output_stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True, frames_per_buffer=CHUNK)
-    output_index = p.get_default_output_device_info()['index']
 
     @classmethod
     def change_output_device(cls, new_output_idx):

@@ -8,6 +8,8 @@ from pathlib import Path
 from environ import ImproperlyConfigured
 import environ # For reading environment variables
 
+from clientclass import ClientObject
+
 # This is only for device references right now.
 # DO NOT RUN ANY AUDIO SERVICES IN HERE.
 if sys.platform == "win32":
@@ -51,29 +53,26 @@ async def writer(redis_channel, request_packet):
 
         command_id = result.split("/")[1] # This should be the first word in the command. Any other segment should be a param.
 
-        command = slash_commands.get(command_id)
-        if command:
-            # Command exists, check command and fill data as needed.
-            if "whoami" in command_id:
+        command = slash_commands.get(command_id, None)
+        match command_id:
+            case "help":
+                print(command.format(list(slash_commands.keys())))
+            case "whoami":
                 print(command.format(request_packet["user_name"]))
-            if "devicelist" in command_id:
-                p = pyaudio.PyAudio()
-                p.print_detailed_system_info()
-                del p
-
-            # TODO: Implement these by making a config file that gets read/written to by this file and websockclient.py
-            # if "getinputdevice" in command_id:
-            #     pass
-            # if "getoutputdevice" in command_id:
-            #     pass
-            pass
-
-        # if "whoami" in result.split("/"):
-        #     print("Username is: " + str(request_packet["user_name"]))
-        # elif "devicelist" in result.split("/"):
-        #     p = pyaudio.PyAudio()
-        #     p.print_detailed_system_info()
-        #     del p
+            case "devicelist":
+                ClientObject.p.print_detailed_system_info()
+            case "ping":
+                # Pings the websocket here.
+                # Currently invoking this in some other tests does not work well, so we'll have to find a way soon.
+                pass
+            case "getinputdevice":
+                # Get input device details
+                print(ClientObject.p.get_device_info_by_index(ClientObject.input_index))
+            case "getoutputdevice":
+                # Get output device details
+                print(ClientObject.p.get_device_info_by_index(ClientObject.output_index))
+            case _:
+                pass
         pass
 
     # If string is not empty, push.

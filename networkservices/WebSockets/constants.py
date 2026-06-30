@@ -20,12 +20,14 @@ class ServerID(str, Enum):
 
 # Dictionary of commands users can enter in their redis chat and what they do.
 slash_commands = {
+    "help": "List of commands:\n{}",
     "whoami": "Username is: {}",
     "devicelist": "{}",
     "getinputdevice": "{}",
     "setinputdevice": "{}",
     "getoutputdevice": "{}",
-    "setoutputdevice": "{}"
+    "setoutputdevice": "{}",
+    "ping": "{}"
 }
 
 
